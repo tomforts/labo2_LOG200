@@ -72,7 +72,7 @@ class Client {
                         }
 
                         int opposite = myPiece == 5 ? 3 : 5;
-                        String normalizedMove = opponentMove.replace("-", "");
+                        String normalizedMove = opponentMove.replaceAll("[\\s-]+", "");
                         boolean validMove = false;
 
                         for (String move : getMoves(board, opposite)) {
