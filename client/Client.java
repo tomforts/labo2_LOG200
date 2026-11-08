@@ -8,8 +8,9 @@ class Client {
         String host = args.length >= 1 ? args[0] : "localhost";
         int port = args.length >= 2 ? Integer.parseInt(args[1]) : 8888;
         int[][] board = null;
+        String lastMove = null;
+        ArrayList<String> rejectedMoves = new ArrayList<>();
 
-        
         try (GameConnection connection = new GameConnection(host, port);
              BufferedReader console =new BufferedReader(new InputStreamReader(System.in))
             ) {
@@ -39,59 +40,66 @@ class Client {
 
                         board = new int[game.getCols()][game.getRows()];
                         myPiece = game.getSide() == GameConnection.RED ? 5 : 3;
-
-                        // TODO : sauvegarder le temps max pour repondre
-
+                        lastMove = null;
+                        rejectedMoves.clear();
                         break;
 
                     case GameConnection.PLAY_RED:
-                         readBoard(message.getData(), board, game.getRows(), game.getCols());
-
+                        readBoard(message.getData(), board, game.getRows(), game.getCols());
                         System.out.println("Nouvelle partie! Vous jouez rouge.");
-
-                        System.out.println( "Entrez votre premier coup : ");
-                        // TODO : Appeler getNextMoveAB(board) pour choisir le meilleur coup
-                        // TODO : Selectionner un coup parmi les meilleurs coups retournes
-                        // TODO : Envoyer automatiquement ce coup au serveur
-                        // TODO : Memoriser le coup envoye pour mettre a jour le plateau lorsqu'il est accepte
-                        connection.sendMove(console.readLine());                       
+                        lastMove = playMove(connection, board, rejectedMoves);
                         break;
 
                     case GameConnection.PLAY_BLACK:
-                        readBoard(
-                                message.getData(),
-                                board,
-                                game.getRows(),
-                                game.getCols());
+                        readBoard( message.getData(), board,  game.getRows(), game.getCols());
 
                         System.out.println("Nouvelle partie! Vous jouez noir.");
 
                         System.out.println("Attendez le coup des rouges.");
-                        // TODO : Attendre le message PLAY contenant le coup des rouges
-                        // TODO : Verifier la validite du coup adverse lors de sa reception
                         break;
 
                     case GameConnection.PLAY:
-                        System.out.println("Dernier coup : "+ message.getData());
+                        String opponentMove = message.getData().trim().toUpperCase();
 
-                        System.out.println("Entrez votre coup : ");
+                        if (opponentMove.equals("A8-A8")) {
+                            if (myPiece == 5 && lastMove == null) lastMove = playMove(connection, board, rejectedMoves);
+                            break;
+                        }
 
-                        connection.sendMove(console.readLine());
-                        // TODO : Gerer le coup special A8-A8 envoye au premier tour des rouges
-                        // TODO : updater le plateau avec notre dernier coup accepte
-                        // TODO : applique le coup adverse sur le plateau avec applyMove()
-                        // TODO : appeler getNextMoveAB(board) pour calculer notre prochain coup
-                        // TODO : selectionner un coup et l'envoyer au serveur
-                        // TODO : memoriser le coup envoye en attendant sa validation
+                        if (lastMove != null) {
+                            applyMove(board, lastMove, myPiece);
+                            lastMove = null;
+                        }
+
+                        int opposite = myPiece == 5 ? 3 : 5;
+                        String normalizedMove = opponentMove.replace("-", "");
+                        boolean validMove = false;
+
+                        for (String move : getMoves(board, opposite)) {
+                            if (move.replace("-", "").equals(normalizedMove)) {
+                                validMove = true;
+                                break;
+                            }
+                        }
+
+                        if (!validMove) {
+                            System.out.println("Coup adverse invalide : " + opponentMove);
+                            break;
+                        }
+
+                        applyMove(board, opponentMove, opposite);
+                        System.out.println("Coup adverse : " + opponentMove);
+
+                        rejectedMoves.clear();
+                        lastMove = playMove(connection, board, rejectedMoves);
                         break;
 
                     case GameConnection.INVALID_MOVE:
-                        System.out.println("Coup invalide, entrez un nouveau coup : ");
+                        System.out.println("Coup refuse : " + lastMove);
 
-                        connection.sendMove(console.readLine());
-                        // TODO : identifier le coup refuse par le serveur
-                        // TODO : pas renvoyer le meme coup invalide
-                        // TODO : selectionner un autre coup valide
+                        if (lastMove != null) rejectedMoves.add(lastMove);
+
+                        lastMove = playMove(connection, board, rejectedMoves);
                         break;
 
                     case GameConnection.GAME_OVER:
@@ -102,7 +110,8 @@ class Client {
                             System.out.println("Partie terminée. Dernier coup : "+ message.getData());
                         }
 
-                        // TODO : analyser le resultat WIN LOSS DRAW ou TIMEOUT
+                        lastMove = null;
+                        rejectedMoves.clear();
                         break;
 
                     default:
@@ -116,15 +125,40 @@ class Client {
         }
     }
 
+    private static String playMove(GameConnection connection, int[][] board, ArrayList<String> rejectedMoves) throws IOException {
+        ArrayList<String> moves = getMoves(board, myPiece);
+        moves.removeAll(rejectedMoves);
+
+        if (moves.isEmpty()) {
+            System.out.println("Aucun coup possible.");
+            return null;
+        }
+
+        String move;
+
+        if (rejectedMoves.isEmpty()) {
+            long start = System.currentTimeMillis();
+            ArrayList<String> bestMoves = getNextMoveAB(board);
+            bestMoves.removeAll(rejectedMoves);
+            move = bestMoves.isEmpty() ? moves.get(0) : bestMoves.get(0);
+            System.out.println("Temps Alpha-Beta : " + (System.currentTimeMillis() - start) + " ms");
+        } else {
+            move = moves.get(0);
+        }
+
+        connection.sendMove(move);
+        System.out.println("Coup envoye : " + move);
+        return move;
+    }
+
     private static int scoreAlphaBeta(int[][] board, int player, int alpha, int beta, int depth) {
         int opposite = player == 5 ? 3 : 5;
         numExploredNodes++;
 
-        if (depth == 0) return evaluateBoard(board);
-
         ArrayList<String> moves = getMoves(board, player);
 
         if (moves.isEmpty()) return player == myPiece ? -100000 : 100000;
+        if (depth == 0) return evaluateBoard(board);
 
         if (player == myPiece) {
             int value = Integer.MIN_VALUE;
@@ -174,7 +208,7 @@ class Client {
         for (String move : possibleMoves) {
             applyMove(board, move, myPiece);
 
-            int value = scoreAlphaBeta(board, opposite, alpha, beta, 2);
+            int value = scoreAlphaBeta(board, opposite, alpha, beta, 1);
 
             undoMove(board, move, myPiece);
 
@@ -193,16 +227,78 @@ class Client {
     }
 
     private static ArrayList<String> getMoves(int[][] board, int player) {
-        // TODO : generer les deplacements et les cases a detruire
-        return new ArrayList<>();
+        ArrayList<String> moves = new ArrayList<>();
+        int px = -1, py = -1;
+        for (int i = 0; i < board.length; i++) {
+            for (int j = 0; j < board[i].length; j++) {
+                if (board[i][j] == player) {
+                    px = i;
+                    py = j;
+                    break;
+                }
+            }
+            if (px != -1) break;
+        }
+
+        if (px == -1) return moves;
+
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                if (dx == 0 && dy == 0) continue;
+
+                for (int distance = 1; distance <= 3; distance++) {
+                    int newX = px + dx * distance;
+                    int newY = py + dy * distance;
+
+                    if (!inside(board, newX, newY) || board[newX][newY] != 0) break;
+
+                    board[px][py] = 0;
+                    board[newX][newY] = player;
+
+                    ArrayList<String> removableSquares = getRemovableSquares(board, player);
+
+                    for (String target : removableSquares) {
+                        String move = square(px, py, board[0].length) + "-" + square(newX, newY, board[0].length) + "-" + target;
+                        moves.add(move);
+                    }
+
+                    board[newX][newY] = 0;
+                    board[px][py] = player;
+                }
+            }
+        }
+
+        return moves;
     }
 
     private static void applyMove(int[][] board, String move, int player) {
-        // TODO : appliquer le deplacement et la destruction
+        String[] positions = move.replaceAll("[\\s-]+", "").toUpperCase().split("(?=[A-Z])");
+
+        int startX = positions[0].charAt(0) - 'A';
+        int startY = board[0].length - Integer.parseInt(positions[0].substring(1));
+        int endX = positions[1].charAt(0) - 'A';
+        int endY = board[0].length - Integer.parseInt(positions[1].substring(1));
+        int destroyX = positions[2].charAt(0) - 'A';
+        int destroyY = board[0].length - Integer.parseInt(positions[2].substring(1));
+
+        board[startX][startY] = 0;
+        board[endX][endY] = player;
+        board[destroyX][destroyY] = 1;
     }
 
     private static void undoMove(int[][] board, String move, int player) {
-        // TODO : annuler le coup
+        String[] positions = move.replaceAll("[\\s-]+", "").toUpperCase().split("(?=[A-Z])");
+
+        int startX = positions[0].charAt(0) - 'A';
+        int startY = board[0].length - Integer.parseInt(positions[0].substring(1));
+        int endX = positions[1].charAt(0) - 'A';
+        int endY = board[0].length - Integer.parseInt(positions[1].substring(1));
+        int destroyX = positions[2].charAt(0) - 'A';
+        int destroyY = board[0].length - Integer.parseInt(positions[2].substring(1));
+
+        board[destroyX][destroyY] = 0;
+        board[endX][endY] = 0;
+        board[startX][startY] = player;
     }
 
     private static int evaluateBoard(int[][] board) {
