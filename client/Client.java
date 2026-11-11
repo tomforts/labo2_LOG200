@@ -71,21 +71,6 @@ class Client {
                         }
 
                         int opposite = myPiece == 5 ? 3 : 5;
-                        String normalizedMove = opponentMove.replaceAll("[\\s-]+", "");
-                        boolean validMove = false;
-
-                        for (String move : Game.getMoves(board, opposite)) {
-                            if (move.replace("-", "").equals(normalizedMove)) {
-                                validMove = true;
-                                break;
-                            }
-                        }
-
-                        if (!validMove) {
-                            System.out.println("Coup adverse invalide : " + opponentMove);
-                            break;
-                        }
-
                         Game.applyMove(board, opponentMove, opposite);
                         System.out.println("Coup adverse : " + opponentMove);
 
