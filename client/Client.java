@@ -30,14 +30,16 @@ class Client {
 
                     case GameConnection.GAME_INFO:
                         game = connection.parseGameInfo(message);
+                        int rows = game.getRows();
+                        int cols = game.getCols();
                         System.out.println(
                             "Nouvelle partie :"
-                            + "\n  Plateau : " + game.getRows() + " x " + game.getCols()
+                            + "\n  Plateau : " + rows + " x " + cols
                             + "\n  Temps maximal par coup : "
                             + game.getMaxMoveTime() + " ms");
 
 
-                        board = new int[game.getCols()][game.getRows()];
+                        board = new int[rows][cols];
                         myPiece = game.getSide() == GameConnection.RED ? 5 : 3;
                         lastMove = null;
                         rejectedMoves.clear();
@@ -50,7 +52,7 @@ class Client {
                         break;
 
                     case GameConnection.PLAY_BLACK:
-                        readBoard( message.getData(), board,  game.getRows(), game.getCols());
+                        readBoard(message.getData(), board,  game.getRows(), game.getCols());
 
                         System.out.println("Nouvelle partie! Vous jouez noir.");
 
@@ -60,6 +62,7 @@ class Client {
                     case GameConnection.PLAY:
                         String opponentMove = message.getData().trim().toUpperCase();
 
+                        // Ulric: cette ligne sert à quoi ???
                         if (opponentMove.equals("A8-A8")) {
                             if (myPiece == 5 && lastMove == null) lastMove = playMove(connection, board, rejectedMoves);
                             break;
@@ -122,9 +125,11 @@ class Client {
 
         if (rejectedMoves.isEmpty()) {
             long start = System.currentTimeMillis();
+
             ArrayList<String> bestMoves = new AI(myPiece).getNextMoveAB(board);
             bestMoves.removeAll(rejectedMoves);
             move = bestMoves.isEmpty() ? moves.get(0) : bestMoves.get(0);
+            
             //print pour tester la rapidité de notre algo. permet de voir le temps quand on fait des changements..
             System.out.println("Temps Alpha-Beta : " + (System.currentTimeMillis() - start) + " ms");
         } else {

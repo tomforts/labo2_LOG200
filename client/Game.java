@@ -5,19 +5,14 @@ public class Game {
     //retourne tous les coups possibles incluant les cases a detruire
     public static ArrayList<String> getMoves(int[][] board, int player) {
         ArrayList<String> moves = new ArrayList<>();
-        int px = -1, py = -1;
-        for (int i = 0; i < board.length; i++) {
-            for (int j = 0; j < board[i].length; j++) {
-                if (board[i][j] == player) {
-                    px = i;
-                    py = j;
-                    break;
-                }
-            }
-            if (px != -1) break;
+        int[] playerPos = findPlayer(board, player);
+        if (playerPos == null) {
+            return moves;
         }
+        int px = playerPos[0], py = playerPos[1];
 
-        if (px == -1) return moves;
+        int boardSize = board[0].length;
+        String currentPoString = square(px, py, boardSize);
 
         for (int dx = -1; dx <= 1; dx++) {
             for (int dy = -1; dy <= 1; dy++) {
@@ -35,7 +30,7 @@ public class Game {
                     ArrayList<String> removableSquares = getRemovableSquares(board, player);
 
                     for (String target : removableSquares) {
-                        String move = square(px, py, board[0].length) + "-" + square(newX, newY, board[0].length) + "-" + target;
+                        String move = currentPoString + "-" + square(newX, newY, boardSize) + "-" + target;
                         moves.add(move);
                     }
 
@@ -49,14 +44,15 @@ public class Game {
     }
 
     public static void applyMove(int[][] board, String move, int player) {
+        int boardSize = board[0].length;
         String[] positions = move.replaceAll("[\\s-]+", "").toUpperCase().split("(?=[A-Z])");
 
         int startX = positions[0].charAt(0) - 'A';
-        int startY = board[0].length - Integer.parseInt(positions[0].substring(1));
+        int startY = boardSize - Integer.parseInt(positions[0].substring(1));
         int endX = positions[1].charAt(0) - 'A';
-        int endY = board[0].length - Integer.parseInt(positions[1].substring(1));
+        int endY = boardSize - Integer.parseInt(positions[1].substring(1));
         int destroyX = positions[2].charAt(0) - 'A';
-        int destroyY = board[0].length - Integer.parseInt(positions[2].substring(1));
+        int destroyY = boardSize - Integer.parseInt(positions[2].substring(1));
 
         board[startX][startY] = 0;
         board[endX][endY] = player;
@@ -64,36 +60,39 @@ public class Game {
     }
 
     public static void undoMove(int[][] board, String move, int player) {
+        int boardSize = board[0].length;
         String[] positions = move.replaceAll("[\\s-]+", "").toUpperCase().split("(?=[A-Z])");
 
         int startX = positions[0].charAt(0) - 'A';
-        int startY = board[0].length - Integer.parseInt(positions[0].substring(1));
+        int startY = boardSize - Integer.parseInt(positions[0].substring(1));
         int endX = positions[1].charAt(0) - 'A';
-        int endY = board[0].length - Integer.parseInt(positions[1].substring(1));
+        int endY = boardSize - Integer.parseInt(positions[1].substring(1));
         int destroyX = positions[2].charAt(0) - 'A';
-        int destroyY = board[0].length - Integer.parseInt(positions[2].substring(1));
+        int destroyY = boardSize - Integer.parseInt(positions[2].substring(1));
 
         board[destroyX][destroyY] = 0;
         board[endX][endY] = 0;
         board[startX][startY] = player;
     }
 
-    //compte le nombre total de move possible, excluant les cases a detruire
-    public static int countMoves(int[][] board, int player) {
-        int px = -1, py = -1;
-
-        for (int x = 0; x < board.length; x++) {
-            for (int y = 0; y < board[0].length; y++) {
-                if (board[x][y] == player) {
-                    px = x;
-                    py = y;
-                    break;
+    public static int[] findPlayer(int[][] board, int player) {
+        for (int i = 0; i < board.length; i++) {
+            for (int j = 0; j < board[i].length; j++) {
+                if (board[i][j] == player) {
+                    return new int[]{i,j};
                 }
             }
-            if (px != -1) break;
         }
+        return null;
+    }
 
-        if (px == -1) return 0;
+    //compte le nombre total de move possible, excluant les cases a detruire
+    public static int countMoves(int[][] board, int player) {
+        int[] playerPos = findPlayer(board, player);
+        if (playerPos == null) {
+            return 0;
+        }
+        int px = playerPos[0], py = playerPos[1];
 
         int moves = 0;
 
@@ -139,7 +138,10 @@ public class Game {
             return removableSquares;
         }
 
-        int sizeMod = 2;
+        // 1 if 20 or more destroyed
+        // 2 if between 10 and 19
+        // 3 if 10 or less
+        int sizeMod = 1;
         if (destroyedSquares < 10) {
             sizeMod = 3;
         } else if (destroyedSquares < 20) {

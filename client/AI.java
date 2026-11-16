@@ -2,20 +2,31 @@ import java.util.ArrayList;
 
 public class AI {
     private final int myPiece;
+    // @TODO: change these values to something more accurate
+    private final int LOSE_VALUE = -100000;
+    private final int WIN_VALUE = 100000;
     private int numExploredNodes = 0;
 
     public AI(int myPiece) {
         this.myPiece = myPiece;
     }
+    
     private int scoreAlphaBeta(int[][] board, int player, int alpha, int beta, int depth) {
         int opposite = player == 5 ? 3 : 5;
         numExploredNodes++;
+        int defaultGameValue = player == myPiece ? LOSE_VALUE : WIN_VALUE;
 
-        if (Game.countMoves(board, player) == 0) return player == myPiece ? -100000 : 100000;
+        if (Game.countMoves(board, player) == 0) return defaultGameValue;
+        
+        // Ulric: Pourquoi on check juste une profondeur de 3 moves dans le futur ?
+        // Si c'est à cause de la limite de temps, ce serait mieux de stocker le meilleur move quelque part et de continuer d'explorer
+        // Jusqu'a ce qu'on atteigne la limite de temps, si on n'a pas le temps de tout checker, on envoie le meilleur move stocké
+        // Sinon, on a eu le temps de trouver le move optimal.
+        // À vérifier
         if (depth == 0) return evaluateBoard(board);
 
         ArrayList<String> moves = Game.getMoves(board, player);
-        if (moves.isEmpty()) return player == myPiece ? -100000 : 100000;
+        if (moves.isEmpty()) return defaultGameValue;
 
         if (player == myPiece) {
             int value = Integer.MIN_VALUE;
@@ -49,6 +60,7 @@ public class AI {
             return value;
         }
     }
+
     public ArrayList<String> getNextMoveAB(int[][] board) {
         numExploredNodes = 0;
 
@@ -91,8 +103,8 @@ public class AI {
         int myMoves = Game.countMoves(board, myPiece);
         int opponentMoves = Game.countMoves(board, opposite);
 
-        if (myMoves == 0) return -100000;
-        if (opponentMoves == 0) return 100000;
+        if (myMoves == 0) return LOSE_VALUE;
+        if (opponentMoves == 0) return WIN_VALUE;
 
         int score = myMoves * 10 - opponentMoves * 10;
 
