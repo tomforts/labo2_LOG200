@@ -2,6 +2,15 @@ import java.io.*;
 import java.util.ArrayList;
 
 class Client {
+    private static final int RED = 5;
+    private static final int BLACK = 3;
+
+    // @TODO: REMOVE THIS ONCE TESTING HAS BEEN FINISHED
+    private static final boolean useImprovedVersion = true;
+
+    private static Partie currentGame;
+    private static Player playerAI;
+
     private static int myPiece = 5;
     public static void main(String[] args) {
         String host = args.length >= 1 ? args[0] : "localhost";
@@ -40,19 +49,33 @@ class Client {
 
 
                         board = new int[rows][cols];
-                        myPiece = game.getSide() == GameConnection.RED ? 5 : 3;
+                        myPiece = game.getSide() == GameConnection.RED ? RED : BLACK;
                         lastMove = null;
                         rejectedMoves.clear();
+
+                        currentGame = new Partie(rows, cols);
                         break;
 
                     case GameConnection.PLAY_RED:
-                        readBoard(message.getData(), board, game.getRows(), game.getCols());
                         System.out.println("Nouvelle partie! Vous jouez rouge.");
-                        lastMove = playMove(connection, board, rejectedMoves);
+                        if (useImprovedVersion) {
+                            currentGame.readBoard(message.getData());
+                            playerAI = new Player(myPiece, currentGame);
+                            lastMove = playMove2(connection, rejectedMoves);
+                        } else {
+                            readBoard(message.getData(), board, game.getRows(), game.getCols());
+                            lastMove = playMove(connection, board, rejectedMoves);
+                        }
+
                         break;
 
                     case GameConnection.PLAY_BLACK:
-                        readBoard(message.getData(), board,  game.getRows(), game.getCols());
+                        if (useImprovedVersion) {
+                            currentGame.readBoard(message.getData());
+                            playerAI = new Player(myPiece, currentGame);
+                        } else {
+                            readBoard(message.getData(), board, game.getRows(), game.getCols());
+                        }
 
                         System.out.println("Nouvelle partie! Vous jouez noir.");
 
@@ -64,7 +87,7 @@ class Client {
 
                         // Ulric: cette ligne sert à quoi ???
                         if (opponentMove.equals("A8-A8")) {
-                            if (myPiece == 5 && lastMove == null) lastMove = playMove(connection, board, rejectedMoves);
+                            if (myPiece == RED && lastMove == null) lastMove = playMove(connection, board, rejectedMoves);
                             break;
                         }
 
@@ -73,12 +96,19 @@ class Client {
                             lastMove = null;
                         }
 
-                        int opposite = myPiece == 5 ? 3 : 5;
-                        Game.applyMove(board, opponentMove, opposite);
+                        int opposite = myPiece == RED ? BLACK : RED;
                         System.out.println("Coup adverse : " + opponentMove);
 
-                        rejectedMoves.clear();
-                        lastMove = playMove(connection, board, rejectedMoves);
+                        if (useImprovedVersion) {
+                            currentGame.applyMove(opponentMove, opposite);
+                            rejectedMoves.clear();
+                            lastMove = playMove2(connection, rejectedMoves);
+                        } else {
+                            Game.applyMove(board, opponentMove, opposite);
+                            rejectedMoves.clear();
+                            lastMove = playMove(connection, board, rejectedMoves);
+                        }
+
                         break;
 
                     case GameConnection.INVALID_MOVE:
@@ -86,7 +116,12 @@ class Client {
 
                         if (lastMove != null) rejectedMoves.add(lastMove);
 
-                        lastMove = playMove(connection, board, rejectedMoves);
+                        if (useImprovedVersion) {
+                            // undo last move
+                            lastMove = playMove2(connection, rejectedMoves);
+                        } else {
+                            lastMove = playMove(connection, board, rejectedMoves);
+                        }
                         break;
 
                     case GameConnection.GAME_OVER:
@@ -127,11 +162,14 @@ class Client {
             long start = System.currentTimeMillis();
 
             ArrayList<String> bestMoves = new AI(myPiece).getNextMoveAB(board);
-            bestMoves.removeAll(rejectedMoves);
             move = bestMoves.isEmpty() ? moves.get(0) : bestMoves.get(0);
             
             //print pour tester la rapidité de notre algo. permet de voir le temps quand on fait des changements..
             System.out.println("Temps Alpha-Beta : " + (System.currentTimeMillis() - start) + " ms");
+
+            // 596ms
+            // 595ms
+            // 592ms
         } else {
             move = moves.get(0);
         }
@@ -140,6 +178,30 @@ class Client {
         System.out.println("Coup envoye : " + move);
         return move;
     }
+
+    private static String playMove2(GameConnection connection, ArrayList<String> rejectedMoves) throws IOException {
+        String move;
+
+        if (rejectedMoves.isEmpty()) {
+            long start = System.currentTimeMillis();
+
+            ArrayList<String> bestMoves = playerAI.getNextMovesAB();
+            move = bestMoves.get(0);
+            
+            //print pour tester la rapidité de notre algo. permet de voir le temps quand on fait des changements..
+            System.out.println("Temps Alpha-Beta v2 : " + (System.currentTimeMillis() - start) + " ms");
+        } else {
+            // get next best thing ?
+            throw new IllegalArgumentException("Invalid playMove2");
+            // move = "";
+        }
+
+        connection.sendMove(move);
+        currentGame.applyMove(move, myPiece);
+        System.out.println("Coup envoye : " + move);
+        return move;
+    }
+
 
     private static void readBoard(
             String data,

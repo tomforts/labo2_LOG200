@@ -17,12 +17,6 @@ public class AI {
         int defaultGameValue = player == myPiece ? LOSE_VALUE : WIN_VALUE;
 
         if (Game.countMoves(board, player) == 0) return defaultGameValue;
-        
-        // Ulric: Pourquoi on check juste une profondeur de 3 moves dans le futur ?
-        // Si c'est à cause de la limite de temps, ce serait mieux de stocker le meilleur move quelque part et de continuer d'explorer
-        // Jusqu'a ce qu'on atteigne la limite de temps, si on n'a pas le temps de tout checker, on envoie le meilleur move stocké
-        // Sinon, on a eu le temps de trouver le move optimal.
-        // À vérifier
         if (depth == 0) return evaluateBoard(board);
 
         ArrayList<String> moves = Game.getMoves(board, player);
@@ -92,6 +86,9 @@ public class AI {
             alpha = Math.max(alpha, bestScore);
         }
 
+        // System.out.println(bestMoves.toString());
+        // System.out.println(bestMoves.size());
+        // 58
         return bestMoves;
     }
 

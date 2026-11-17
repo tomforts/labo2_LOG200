@@ -1,6 +1,12 @@
 import java.util.ArrayList;
 
 public class Game {
+    // Constants
+    private static final int RED = 5;
+    private static final int BLACK = 3;
+    private static final int EMPTY = 0;
+    private static final int DESTROYED = 1;
+
 
     //retourne tous les coups possibles incluant les cases a detruire
     public static ArrayList<String> getMoves(int[][] board, int player) {
@@ -116,9 +122,7 @@ public class Game {
     private static ArrayList<String> getRemovableSquares(int[][] board, int player) {
         ArrayList<String> removableSquares = new ArrayList<>();
 
-        // 0 = empty, 1 = destroyed, 3 = black, 5 = red
-
-        int opposite = player == 5 ? 3 : 5;
+        int opposite = player == RED ? BLACK : RED;
         int px = -1;
         int py = -1;
         int destroyedSquares = 0;
