@@ -190,6 +190,11 @@ class Client {
             
             //print pour tester la rapidité de notre algo. permet de voir le temps quand on fait des changements..
             System.out.println("Temps Alpha-Beta v2 : " + (System.currentTimeMillis() - start) + " ms");
+
+            System.out.println("Temps total getMov : " + (Partie.testGetMove) + " ms");
+            System.out.println("Temps total territory : " + (Partie.testTerritory) + " ms");
+            Partie.testGetMove = 0;
+            Partie.testTerritory = 0;
         } else {
             // get next best thing ?
             throw new IllegalArgumentException("Invalid playMove2");

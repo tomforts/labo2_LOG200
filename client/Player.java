@@ -8,6 +8,11 @@ public class Player {
     // @TODO: change these values to something more accurate
     private final int LOSE_VALUE = -100000;
     private final int WIN_VALUE = 100000;
+    private final int MOBILITY_WEIGHT = 100;
+    private final int TERRITORY_WEIGHT = 100;
+    private final int TERRITORY_FUTURE_WEIGHT = 5;
+    private final int DISTANCE_WEIGHT = 2;
+    private final int POSITION_WEIGHT = 20;
     private int numExploredNodes = 0;
 
     private Partie currentGame;
@@ -17,6 +22,9 @@ public class Player {
         this.currentGame = game;
     }
 
+    // Improvements:
+    // 1. evaluate board and explore in order of score
+    // 2. score moves with before and after of score of board
     public ArrayList<String> getNextMovesAB() {
         numExploredNodes = 0;
 
@@ -26,9 +34,9 @@ public class Player {
         if (possibleMovements.isEmpty()) return bestMoves;
 
         int opposite = myPiece == RED ? BLACK : RED;
-        int alpha = Integer.MIN_VALUE;
-        int beta = Integer.MAX_VALUE;
-        int bestScore = Integer.MIN_VALUE;
+        double alpha = Integer.MIN_VALUE;
+        double beta = Integer.MAX_VALUE;
+        double bestScore = Integer.MIN_VALUE;
 
         int currentPosition = currentGame.getPosition(myPiece);
         for (int destination : possibleMovements) {
@@ -38,7 +46,7 @@ public class Player {
             for (Integer destroySquare : destroyables) {
                 currentGame.toggleDestroyed(destroySquare);
 
-                int value = scoreAlphaBeta(opposite, alpha, beta, 2);
+                double value = scoreAlphaBeta(opposite, alpha, beta, 2);
 
                 currentGame.toggleDestroyed(destroySquare);
 
@@ -58,7 +66,7 @@ public class Player {
         return bestMoves;
     }
 
-    private int scoreAlphaBeta(int player, int alpha, int beta, int depth) {
+    private double scoreAlphaBeta(int player, double alpha, double beta, int depth) {
         int opposite = player == RED ? BLACK : RED;
         numExploredNodes++;
         int defaultGameValue = player == myPiece ? LOSE_VALUE : WIN_VALUE;
@@ -69,7 +77,7 @@ public class Player {
 
         int currentPosition = currentGame.getPosition(player);
         if (player == myPiece) {
-            int value = Integer.MIN_VALUE;
+            double value = Integer.MIN_VALUE;
 
             for (int destination : possibleMovements) {
                 currentGame.applyMovement(currentPosition, destination, player);
@@ -78,7 +86,7 @@ public class Player {
                 for (Integer destroySquare : destroyables) {
                     currentGame.toggleDestroyed(destroySquare);
 
-                    int score = scoreAlphaBeta(opposite, alpha, beta, depth - 1);
+                    double score = scoreAlphaBeta(opposite, alpha, beta, depth - 1);
 
                     currentGame.toggleDestroyed(destroySquare);
 
@@ -92,7 +100,7 @@ public class Player {
 
             return value;
         } else {
-            int value = Integer.MAX_VALUE;
+            double value = Integer.MAX_VALUE;
 
             for (int destination : possibleMovements) {
                 currentGame.applyMovement(currentPosition, destination, player);
@@ -101,7 +109,7 @@ public class Player {
                 for (Integer destroySquare : destroyables) {
                     currentGame.toggleDestroyed(destroySquare);
 
-                    int score = scoreAlphaBeta(opposite, alpha, beta, depth - 1);
+                    double score = scoreAlphaBeta(opposite, alpha, beta, depth - 1);
 
                     currentGame.toggleDestroyed(destroySquare);
 
@@ -128,19 +136,58 @@ public class Player {
     // - are ties possible ? If so, do we give them a value other than 0 ?
     // - which stage of the game we are (destroyed squares > 20, etc.)
     // - check if destination can leave us boxed in without losing
-    private int evaluateBoard() {
+    private double evaluateBoard() {
         int opposite = myPiece == RED ? BLACK : RED;
-        int myMoves = currentGame.getMovements(myPiece).size();
-        int opponentMoves = currentGame.getMovements(opposite).size();
+        ArrayList<Integer> myMoves = currentGame.getMovements(myPiece);
+        ArrayList<Integer> opponentMoves = currentGame.getMovements(opposite);
+        int myMoveCount = myMoves.size();
+        int opponentMoveCount = opponentMoves.size();
 
-        if (myMoves == 0) return LOSE_VALUE;
-        if (opponentMoves == 0) return WIN_VALUE;
+        if (myMoveCount == 0) return LOSE_VALUE;
+        if (opponentMoveCount == 0) return WIN_VALUE;
 
-        int score = myMoves * 10 - opponentMoves * 10;
+        // Mobility (HIGH)
+        double myMobility = Math.log1p(1 + myMoveCount);
+        double opponentMobility = Math.log1p(1 + opponentMoveCount);
+        double mobility = MOBILITY_WEIGHT * (myMobility - opponentMobility);
 
-        if (myMoves <= 3) score -= 100;
-        if (opponentMoves <= 3) score += 100;
+        // Territory (VERY HIGH)
+        int myTerritory = currentGame.getTerritory(myPiece);
+        int opponentTerritory = currentGame.getTerritory(opposite);
+        /*
+        long myTerritory = currentGame.getTerritory(myPiece);
+        long opponentTerritory = currentGame.getTerritory(opposite);
+        int myImmediate = (int) (myTerritory >>> 32);
+        int myFuture = (int) myTerritory;
+        int opponentImmediate = (int) (opponentTerritory >>> 32);
+        int opponentFuture = (int) opponentTerritory;
+        */
+        int territory = TERRITORY_WEIGHT * (myTerritory - opponentTerritory);
+        // double territory = TERRITORY_WEIGHT * (Math.log1p(1 + myImmediate) - Math.log1p(1 + opponentImmediate)) + TERRITORY_FUTURE_WEIGHT * (myFuture - opponentFuture);
 
-        return score;
+
+        // Distance (VERY LOW)
+        /*
+        int myPos = currentGame.getPosition(myPiece);
+        int myPosX = currentGame.getX(myPos);
+        int myPosY = currentGame.getY(myPos);
+        int opponentPos = currentGame.getPosition(opposite);
+        int opponentPosX = currentGame.getX(opponentPos);
+        int opponentPosY = currentGame.getY(opponentPos);
+        // distance between players ? optimal distance ?
+        // does not represent that much, needs to be improved
+        int distance = DISTANCE_WEIGHT * Math.max(Math.abs(myPosX - opponentPosX), Math.abs(myPosY - opponentPosY));
+        */
+
+        // Flexibility (LOW)
+        // could divide the board into quadrants based on the directions
+        // the amount and size of the quadrants could be their value
+        int myPositionFlex = currentGame.getDirectionCount(myPiece);
+        int opponentPositionFlex = currentGame.getDirectionCount(opposite);
+        int positionFlex = POSITION_WEIGHT * (myPositionFlex - opponentPositionFlex);
+
+        return mobility + territory + positionFlex;
+
+        // should take into account depth
     }
 }

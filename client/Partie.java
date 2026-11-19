@@ -1,4 +1,7 @@
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 
 public class Partie {
     // Constants
@@ -6,6 +9,16 @@ public class Partie {
     private static final int BLACK = 3;
     private static final int EMPTY = 0;
     private static final int DESTROYED = 1;
+    private static final int[] DX = {
+        -1, -1, -1, 0, 0, 1, 1, 1
+    };
+
+    private static final int[] DY = {
+        -1, 0, 1, -1, 1, -1, 0, 1
+    };
+
+    public static long testGetMove = 0;
+    public static long testTerritory = 0;
 
     // Board data
     private int[] board;
@@ -76,8 +89,14 @@ public class Partie {
     
     public void setPosition(int player, int position) {
         if (player == RED) {
+            if (redPos >= 0) {
+                board[redPos] = EMPTY;
+            }
             redPos = position;
         } else {
+            if (blackPos >= 0) {
+                board[blackPos] = EMPTY;
+            }
             blackPos = position;
         }
         board[position] = player;
@@ -94,19 +113,19 @@ public class Partie {
     }
 
 
-    private int getIndex(int x, int y) {
+    public int getIndex(int x, int y) {
         return y * rows + x;
     }
 
-    private int getX(int position) {
+    public int getX(int position) {
         return position % cols;
     }
 
-    private int getY(int position) {
+    public int getY(int position) {
         return position / rows;
     }
 
-    private boolean inside(int x, int y) {
+    public boolean inside(int x, int y) {
         return x >= 0 && x < cols
             && y >= 0 && y < rows;
     }
@@ -144,30 +163,30 @@ public class Partie {
         applyMove(from, to, destroyed, player);
     }
 
+    // This is responsible for half the time spend
     public ArrayList<Integer> getMovements(int player) {
+        long start = System.currentTimeMillis();
         ArrayList<Integer> possibleMovements = new ArrayList<>();
 
         int playerPos = getPosition(player);
         int px = getX(playerPos);
         int py = getY(playerPos);
 
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                if (dx == 0 && dy == 0) continue;
+        for (int d = 0; d < 8; d++) {
+            for (int distance = 1; distance <= 3; distance++) {
+                int newX = px + DX[d] * distance;
+                int newY = py + DY[d] * distance;
 
-                for (int distance = 1; distance <= 3; distance++) {
-                    int newX = px + dx * distance;
-                    int newY = py + dy * distance;
+                if (!inside(newX, newY)) break;
 
-                    if (!inside(newX, newY)) break;
+                int newPos = getIndex(newX, newY);
+                if (board[newPos] != EMPTY) break;
 
-                    int newPos = getIndex(newX, newY);
-                    if (board[newPos] != EMPTY) break;
-
-                    possibleMovements.add(newPos);
-                }
+                possibleMovements.add(newPos);
             }
         }
+
+        testGetMove += System.currentTimeMillis() - start;
         return possibleMovements;
     }
 
@@ -215,6 +234,54 @@ public class Partie {
         }
 
         return possibleDestroy;
+    }
+
+    public int getTerritory(int player) {
+        // long start = System.currentTimeMillis();
+        boolean workInProgress = true;
+        if (workInProgress) {
+            return 0;
+        }
+        int currentPos = getPosition(player);
+
+        HashSet<Integer> positions = new HashSet<Integer>();
+        ArrayDeque<Integer> posts = new ArrayDeque<Integer>();
+        posts.addAll(getMovements(player));
+        while (posts.size() > 0) {
+            int newPos = posts.poll();
+            if (positions.contains(newPos)) {
+                continue;
+            }
+            positions.add(newPos);
+            setPosition(player, newPos);
+            posts.addAll(getMovements(player));
+            board[newPos] = EMPTY;
+        }
+        setPosition(player, currentPos);
+
+        // testTerritory += System.currentTimeMillis() - start;
+
+        return positions.size();
+    }
+
+    public int getDirectionCount(int player) {
+        // get how well distributed possible movements are
+        int playerPos = getPosition(player);
+        int px = getX(playerPos);
+        int py = getY(playerPos);
+
+        int directionCount = 0;
+        for (int d = 0; d < 8; d++) {
+            int newX = px + DX[d];
+            int newY = py + DY[d];
+
+            if (!inside(newX, newY)) continue;
+
+            int newPos = getIndex(newX, newY);
+            if (board[newPos] != EMPTY) continue;
+            directionCount++;
+        }
+        return directionCount;
     }
 
 
