@@ -9,7 +9,11 @@ public class Player {
     private long searchDeadline;
     private boolean stopSearch;
     private int numExploredNodes = 0;
-
+    private static final int MAX_MOVES = 576;
+    // chaque ligne correspond a un niveau de l'arbre
+    // chaque colonne contient un coup possible
+    // on reutilise le  tableau pour eviter de recreer des listes
+    private final int[][] moves = new int[22][MAX_MOVES];
     // @TODO: change these values to something more accurate
     private final int LOSE_VALUE = -100000;
     private final int WIN_VALUE = 100000;
@@ -26,113 +30,6 @@ public class Player {
         this.currentGame = game;
         this.timeLimit = timeLimit;
     }
-
-    // Improvements:
-    // 1. evaluate board and explore in order of score
-    // 2. score moves with before and after of score of board
-    public ArrayList<String> getNextMovesAB2() {
-        numExploredNodes = 0;
-
-        ArrayList<String> bestMoves = new ArrayList<>();
-        ArrayList<Integer> possibleMovements = currentGame.getMovements(myPiece);
-
-        if (possibleMovements.isEmpty()) return bestMoves;
-
-        int opposite = myPiece == RED ? BLACK : RED;
-        double alpha = Integer.MIN_VALUE;
-        double beta = Integer.MAX_VALUE;
-        double bestScore = Integer.MIN_VALUE;
-
-        int currentPosition = currentGame.getPosition(myPiece);
-        for (int destination : possibleMovements) {
-            currentGame.applyMovement(currentPosition, destination, myPiece);
-            // we could evaluate the board post-move and check the destructions only of the best post-move boards ?
-            ArrayList<Integer> destroyables = currentGame.getDestroyables(myPiece);
-            for (Integer destroySquare : destroyables) {
-                currentGame.toggleDestroyed(destroySquare);
-
-                double value = scoreAlphaBeta(opposite, alpha, beta, 2);
-
-                currentGame.toggleDestroyed(destroySquare);
-
-                if (value > bestScore) {
-                    bestScore = value;
-                    bestMoves.clear();
-                    bestMoves.add(currentGame.moveToString(currentPosition, destination, destroySquare));
-                } else if (value == bestScore) {
-                    bestMoves.add(currentGame.moveToString(currentPosition, destination, destroySquare));
-                }
-
-                alpha = Math.max(alpha, bestScore);
-            }
-            currentGame.undoMovement(currentPosition, destination, myPiece);
-        }
-
-        return bestMoves;
-    }
-
-    private double scoreAlphaBeta2(int player, double alpha, double beta, int depth) {
-        int opposite = player == RED ? BLACK : RED;
-        numExploredNodes++;
-        int defaultGameValue = player == myPiece ? LOSE_VALUE : WIN_VALUE;
-
-        ArrayList<Integer> possibleMovements = currentGame.getMovements(myPiece);
-        if (possibleMovements.isEmpty()) return defaultGameValue;
-        if (depth == 0) return evaluateBoard();
-
-        int currentPosition = currentGame.getPosition(player);
-        if (player == myPiece) {
-            double value = Integer.MIN_VALUE;
-
-            for (int destination : possibleMovements) {
-                currentGame.applyMovement(currentPosition, destination, player);
-                // we could evaluate the board post-move and check the destructions only of the best post-move boards ?
-                ArrayList<Integer> destroyables = currentGame.getDestroyables(player);
-                for (Integer destroySquare : destroyables) {
-                    currentGame.toggleDestroyed(destroySquare);
-
-                    double score = scoreAlphaBeta(opposite, alpha, beta, depth - 1);
-
-                    currentGame.toggleDestroyed(destroySquare);
-
-                    value = Math.max(value, score);
-                    alpha = Math.max(alpha, value);
-
-                    if (alpha >= beta) break;
-                }
-                currentGame.undoMovement(currentPosition, destination, player);
-            }
-
-            return value;
-        } else {
-            double value = Integer.MAX_VALUE;
-
-            for (int destination : possibleMovements) {
-                currentGame.applyMovement(currentPosition, destination, player);
-                // we could evaluate the board post-move and check the destructions only of the best post-move boards ?
-                ArrayList<Integer> destroyables = currentGame.getDestroyables(player);
-                for (Integer destroySquare : destroyables) {
-                    currentGame.toggleDestroyed(destroySquare);
-
-                    double score = scoreAlphaBeta(opposite, alpha, beta, depth - 1);
-
-                    currentGame.toggleDestroyed(destroySquare);
-
-                    value = Math.min(value, score);
-                    beta = Math.min(beta, value);
-
-                    if (alpha >= beta) break;
-                }
-                currentGame.undoMovement(currentPosition, destination, player);
-            }
-
-            return value;
-        }
-    }
-
-
-
-    
 
     /**
      * Gets the next best moves using alpha-beta
@@ -155,39 +52,14 @@ public class Player {
 
         ArrayList<String> bestMoves = new ArrayList<>();
 
-        int currentPosition = currentGame.getPosition(myPiece);
-        ArrayList<Integer> possibleMovements = currentGame.getMovements(myPiece);
+        // génere les coups possible à la racine
+        int count = currentGame.generateMoves(myPiece, moves[0]);
 
-        if (possibleMovements.isEmpty()) {
-            return bestMoves;
-        }
+        if (count == 0) return bestMoves;
 
-        // Keep a legal fallback in case the time limit is extremely short.
-        for (int destination : possibleMovements) {
-            currentGame.applyMovement(currentPosition, destination, myPiece);
+        // premier coup légal si manque de temps
+        bestMoves.add(currentGame.encodedToString(moves[0][0]));
 
-            try {
-                ArrayList<Integer> destroyables = currentGame.getDestroyables(myPiece);
-
-                if (!destroyables.isEmpty()) {
-                    bestMoves.add(currentGame.moveToString(
-                            currentPosition, destination, destroyables.get(0)
-                    ));
-                    break;
-                }
-            } finally {
-                // use finally since it allows to be executed even when breaking
-                // This means if we stop several level deep, the board is not stuck with a move half-done
-                currentGame.undoMovement(currentPosition, destination, myPiece);
-            }
-        }
-
-        // no destroyable squares possible
-        if (bestMoves.isEmpty()) {
-            return bestMoves;
-        }
-
-        // Iterative deepening.
         for (int depth = 1; depth <= 20; depth++) {
             if (System.currentTimeMillis() >= searchDeadline) {
                 break;
@@ -195,19 +67,17 @@ public class Player {
 
             ArrayList<String> iterationBestMoves = searchRoot(depth);
 
-            // Do not keep a partially completed search.
             if (stopSearch || iterationBestMoves.isEmpty()) {
                 break;
             }
 
             bestMoves = iterationBestMoves;
         }
-
         return bestMoves;
     }
 
     /**
-     * 
+     *
      * @param depth
      * @return
      */
@@ -215,157 +85,91 @@ public class Player {
         ArrayList<String> bestMoves = new ArrayList<>();
 
         int opposite = myPiece == RED ? BLACK : RED;
-        int currentPosition = currentGame.getPosition(myPiece);
-
-        ArrayList<Integer> possibleMovements = currentGame.getMovements(myPiece);
+        int count = currentGame.generateMoves(myPiece, moves[0]);
 
         double bestScore = Integer.MIN_VALUE;
+        double alpha = Integer.MIN_VALUE;
+        double beta = Integer.MAX_VALUE;
 
-        for (int destination : possibleMovements) {
+        for (int i = 0; i < count; i++) {
             if (stopSearch) break;
 
-            currentGame.applyMovement(currentPosition, destination, myPiece);
+            int move = moves[0][i];
+            currentGame.applyEncoded(move, myPiece);
+
+            double value;
 
             try {
-                ArrayList<Integer> destroyables = currentGame.getDestroyables(myPiece);
-
-                for (int destroySquare : destroyables) {
-                    if (stopSearch) break;
-
-                    currentGame.toggleDestroyed(destroySquare);
-
-                    double value;
-
-                    try {
-                        // The root move has already consumed one depth.
-                        // Search starts with the opponent's turn.
-                        value = scoreAlphaBeta(
-                                opposite,
-                                Integer.MIN_VALUE,
-                                Integer.MAX_VALUE,
-                                depth - 1
-                        );
-                    } finally {
-                        currentGame.toggleDestroyed(destroySquare);
-                    }
-
-                    if (stopSearch) break;
-
-                    if (value > bestScore) {
-                        bestScore = value;
-                        bestMoves.clear();
-                        bestMoves.add(currentGame.moveToString(
-                                currentPosition, destination, destroySquare
-                        ));
-                    } else if (value == bestScore) {
-                        bestMoves.add(currentGame.moveToString(
-                                currentPosition, destination, destroySquare
-                        ));
-                    }
-                }
+                value = scoreAlphaBeta(opposite, alpha, beta, depth - 1, 1);
             } finally {
-                currentGame.undoMovement(currentPosition, destination, myPiece);
+                currentGame.undoEncoded(move, myPiece);
             }
+
+            if (stopSearch) break;
+
+            if (value > bestScore) {
+                bestScore = value;
+                bestMoves.clear();
+                bestMoves.add(currentGame.encodedToString(move));
+            } else if (value == bestScore) {
+                bestMoves.add(currentGame.encodedToString(move));
+            }
+
+            alpha = Math.max(alpha, bestScore);
         }
 
         return bestMoves;
     }
 
-    private double scoreAlphaBeta(
-            int player,
-            double alpha,
-            double beta,
-            int depth
-    ) {
+
+    private double scoreAlphaBeta(int player, double alpha, double beta, int depth, int level) {
         numExploredNodes++;
 
-        // Avoid checking the clock at every node.
-        if ((numExploredNodes & 1023) == 0 && System.currentTimeMillis() >= searchDeadline) {
+        if (System.currentTimeMillis() >= searchDeadline) {
             stopSearch = true;
-            return evaluateBoard();
+            return 0;
         }
 
         int opposite = player == RED ? BLACK : RED;
-
-        // IMPORTANT: Generate movements for the actual player.
-        ArrayList<Integer> possibleMovements = currentGame.getMovements(player);
-
         double defaultGameValue = player == myPiece ? LOSE_VALUE : WIN_VALUE;
 
-        // Check for a terminal position before evaluating the depth limit.
-        if (possibleMovements.isEmpty()) {
-            return defaultGameValue;
-        }
+        if (currentGame.countMovements(player) == 0) return defaultGameValue;
 
-        if (depth == 0) {
-            return evaluateBoard();
-        }
-
-        int currentPosition = currentGame.getPosition(player);
+        if (depth == 0) return evaluateBoard();
 
         boolean maximizing = player == myPiece;
-        double value = maximizing
-                ? Integer.MIN_VALUE
-                : Integer.MAX_VALUE;
+        double value = maximizing ? Integer.MIN_VALUE : Integer.MAX_VALUE;
 
-        boolean foundLegalTurn = false;
+        // chaque level possède son propre tableau de coups.
+        int count = currentGame.generateMoves(player, moves[level]);
+        if (count == 0) return defaultGameValue;
 
-        for (int destination : possibleMovements) {
+        for (int i = 0; i < count; i++) {
             if (stopSearch) break;
 
-            currentGame.applyMovement(
-                    currentPosition, destination, player
-            );
+            int move = moves[level][i];
+
+            currentGame.applyEncoded(move, player);
+
+            double score;
 
             try {
-                ArrayList<Integer> destroyables =
-                        currentGame.getDestroyables(player);
-
-                for (int destroySquare : destroyables) {
-                    if (stopSearch) break;
-
-                    foundLegalTurn = true;
-
-                    currentGame.toggleDestroyed(destroySquare);
-
-                    double score;
-
-                    try {
-                        score = scoreAlphaBeta(
-                                opposite, alpha, beta, depth - 1
-                        );
-                    } finally {
-                        currentGame.toggleDestroyed(destroySquare);
-                    }
-
-                    if (stopSearch) break;
-
-                    if (maximizing) {
-                        value = Math.max(value, score);
-                        alpha = Math.max(alpha, value);
-                    } else {
-                        value = Math.min(value, score);
-                        beta = Math.min(beta, value);
-                    }
-
-                    if (alpha >= beta) {
-                        break;
-                    }
-                }
+                score = scoreAlphaBeta(opposite, alpha, beta, depth - 1, level + 1);
             } finally {
-                currentGame.undoMovement(
-                        currentPosition, destination, player
-                );
+                currentGame.undoEncoded(move, player);
             }
 
-            if (alpha >= beta) {
-                break;
-            }
-        }
+            if (stopSearch) break;
 
-        // A turn requires both a movement and a destruction.
-        if (!foundLegalTurn) {
-            return defaultGameValue;
+            if (maximizing) {
+                value = Math.max(value, score);
+                alpha = Math.max(alpha, value);
+            } else {
+                value = Math.min(value, score);
+                beta = Math.min(beta, value);
+            }
+
+            if (alpha >= beta) break;
         }
 
         return value;
@@ -374,20 +178,17 @@ public class Player {
 
 
 
-
     // @TODO: improve this to better represent how close to winning a board is.
-    // Ideas to improve: 
-    // - take into account the destroyable squares, 
-    // - how deep we currently are, 
+    // Ideas to improve:
+    // - take into account the destroyable squares,
+    // - how deep we currently are,
     // - the amount of possible outcomes overall(ex: a path has 1 win and 1 loss, another has 2 wins and 2 losses, which is better ?)
     // - which stage of the game we are (destroyed squares > 20, etc.)
     // -x check if destination can leave us boxed in without losing
     private double evaluateBoard() {
         int opposite = myPiece == RED ? BLACK : RED;
-        ArrayList<Integer> myMoves = currentGame.getMovements(myPiece);
-        ArrayList<Integer> opponentMoves = currentGame.getMovements(opposite);
-        int myMoveCount = myMoves.size();
-        int opponentMoveCount = opponentMoves.size();
+        int myMoveCount = currentGame.countMovements(myPiece);
+        int opponentMoveCount = currentGame.countMovements(opposite);
 
         if (myMoveCount == 0) return LOSE_VALUE;
         if (opponentMoveCount == 0) return WIN_VALUE;
@@ -430,5 +231,9 @@ public class Player {
 
         // should take into account depth
         return mobility + territory + positionFlex;
+    }
+
+    public int getExploredNodes() {
+        return numExploredNodes;
     }
 }

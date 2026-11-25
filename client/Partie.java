@@ -10,15 +10,19 @@ public class Partie {
     private static final int EMPTY = 0;
     private static final int DESTROYED = 1;
     private static final int[] DY = {
-        -1, -1, -1, 
-        0,       0, 
+        -1, -1, -1,
+        0,       0,
         1,   1,  1
     };
     private static final int[] DX = {
-        -1, 0, 1, 
-        -1,    1, 
+        -1, 0, 1,
+        -1,    1,
         -1, 0, 1
     };
+
+    private final int[] territoryQueue;
+    private final int[] territoryDepth;
+    private final int[] territoryVisited;
 
     // Board data
     private int[] board;
@@ -42,6 +46,10 @@ public class Partie {
         rows = rowCount;
         cols = colCount;
         board = new int[rows * cols];
+
+        territoryQueue = new int[rows * cols];
+        territoryDepth = new int[rows * cols];
+        territoryVisited = new int[rows * cols];
     }
 
     /**
@@ -104,7 +112,7 @@ public class Partie {
     public int getPosition(int player) {
         return player == RED ? redPos : blackPos;
     }
-    
+
     /**
      * Sets the position of the player, does not interact with the board
      * @param player player to set position
@@ -144,7 +152,7 @@ public class Partie {
      * @return index in the board array of the position
      */
     public int getIndex(int x, int y) {
-        return y * rows + x;
+        return y * cols + x;
     }
 
     /**
@@ -162,7 +170,7 @@ public class Partie {
      * @return y coordinate
      */
     public int getY(int position) {
-        return position / rows;
+        return position / cols;
     }
 
     /**
@@ -182,9 +190,9 @@ public class Partie {
      * @return
      */
     public boolean inside(int position) {
-        return position < 0 || position >= (rows * cols);
+        return position >= 0 && position < rows * cols;
     }
-    
+
 
     // --- String conversions --- //
 
@@ -301,7 +309,7 @@ public class Partie {
      */
     public void undoMove(String move, int player) {
         int[] moveSquares = stringToMove(move);
-        applyMove(moveSquares[1], moveSquares[0], moveSquares[2], player);
+        undoMove(moveSquares[0], moveSquares[1], moveSquares[2], player);
     }
 
     /**
@@ -312,13 +320,71 @@ public class Partie {
      * @param player
      */
     public void undoMove(int from, int to, int destroyed, int player) {
+        toggleDestroyed(destroyed);
+        undoMovement(from, to, player);
+    }
+
+    public void applyEncoded(int move, int player) {
+        int from = move & 255;//on lit les 8 premier bits
+        int to = (move >>> 8) & 255;//on lit les 8 bits suivants
+        int destroyed = (move >>> 16) & 255;//on lit les 8 derniers bits
         applyMove(from, to, destroyed, player);
+    }
+
+
+    public void undoEncoded(int move, int player) {
+        int from = move & 255;
+        int to = (move >>> 8) & 255;
+        int destroyed = (move >>> 16) & 255;
+        undoMove(from, to, destroyed, player);
+    }
+
+    // convertit le coup pour le serveur
+    public String encodedToString(int move) {
+        int from = move & 255;
+        int to = (move >>> 8) & 255;
+        int destroyed = (move >>> 16) & 255;
+        return moveToString(from, to, destroyed);
     }
 
 
     // --- Move Generation --- //
 
+    // Génère les coups complets dans output sans faire les string qu'on avait avant
+    public int generateMoves(int player, int[] output) {
+        int from = getPosition(player);
+        int px = getX(from);
+        int py = getY(from);
+        int[] targets = new int[24];
+        int count = 0;
 
+        for (int d = 0; d < 8; d++) {
+            for (int distance = 1; distance <= 3; distance++) {
+                int x = px + DX[d] * distance;
+                int y = py + DY[d] * distance;
+
+                if (!inside(x, y)) break;
+
+                int to = getIndex(x, y);
+                if (board[to] != EMPTY) break;
+
+                applyMovement(from, to, player);
+
+                int n = fillDestroyables(player, targets);
+
+                for (int i = 0; i < n; i++) {
+                    // Exemple : from = 5 , to = 3 , targets[i] = 7
+                    // en binaire : 5 = 00000101, 3 = 00000011, 7 = 00000111
+                    // resultat = 00000111 00000011 00000101
+                    output[count++] = from | (to << 8) | (targets[i] << 16);
+                }
+
+                undoMovement(from, to, player);
+            }
+        }
+
+        return count;
+    }
     /**
      * Gets an arraylist of legal positions for the player to move on the current board
      * Can be improved for speed
@@ -354,139 +420,140 @@ public class Partie {
      * @param player
      * @return
      */
+
     public ArrayList<Integer> getDestroyables(int player) {
+        int[] targets = new int[24];
+        int count = fillDestroyables(player, targets);
+        ArrayList<Integer> result = new ArrayList<>(count);
+
+        for (int i = 0; i < count; i++) result.add(targets[i]);
+
+        return result;
+    }
+
+    // les indices des cases destructibles vont dans targets
+    // retourne le nombre de cases trouver
+    private int fillDestroyables(int player, int[] targets) {
         int opposite = player == RED ? BLACK : RED;
-        ArrayList<Integer> possibleDestroy = new ArrayList<>();
+        int oppositePos = getPosition(opposite);
+        int px = getX(oppositePos);
+        int py = getY(oppositePos);
 
-        int playerPos = getPosition(opposite);
-        int px = getX(playerPos);
-        int py = getY(playerPos);
+        int maxDistance = destroyedCount < 10 ? 3 : 2;
+        int count = 0;
 
-        // 1 if 20 or more destroyed
-        // 2 if between 10 and 19
-        // 3 if 10 or less
-        int sizeMod;
-        if (destroyedCount < 10) {
-            sizeMod = 3;
-        } else if (destroyedCount < 20) {
-            sizeMod = 2;
-        } else {
-            sizeMod = 1;
-        }
+        for (int distance = maxDistance; distance >= 1; distance--) {
+            int previousCount = count;
 
-        for (int i = sizeMod; i > 0; i--) {
-            for (int dx = -i; dx <= i; dx+=i) {
-                // -n 0 n
-                for (int dy = -i; dy <= i; dy+=i) {
-                    // n
-                    // 0
-                    // -n
-                    
-                    if (dx == 0 && dy == 0) {
-                        // if square is player, not inside or opponent/already destroyed, skip
-                        continue;
-                    }
+            for (int dx = -distance; dx <= distance; dx += distance) {
+                for (int dy = -distance; dy <= distance; dy += distance) {
+                    if (dx == 0 && dy == 0) continue;
 
-                    int newX = px + dx;
-                    int newY = py + dy;
+                    int x = px + dx;
+                    int y = py + dy;
 
-                    if (!inside(newX, newY)) {
-                        continue;
-                    }
+                    if (!inside(x, y)) continue;
 
-                    int newPos = getIndex(newX, newY);
-
-                    if (board[newPos] == EMPTY) {
-                        possibleDestroy.add(newPos);
-                    }
+                    int position = getIndex(x, y);
+                    if (board[position] == EMPTY) targets[count++] = position;
                 }
             }
-            if (!possibleDestroy.isEmpty()) {
-                // Only allowed to destroy lower distance when there are NO possible at the distance we should destroy.
-                break;
+
+            if (destroyedCount < 20 && count > previousCount) break;
+        }
+
+        return count;
+    }
+
+    // compte les déplacements sans créer de liste a chaque fois comme avant
+    public int countMovements(int player) {
+        int playerPos = getPosition(player);
+        int px = getX(playerPos);
+        int py = getY(playerPos);
+        int count = 0;
+
+        for (int d = 0; d < 8; d++) {
+            for (int distance = 1; distance <= 3; distance++) {
+                int x = px + DX[d] * distance;
+                int y = py + DY[d] * distance;
+
+                if (!inside(x, y) || board[getIndex(x, y)] != EMPTY) break;
+                count++;
             }
         }
 
-        return possibleDestroy;
+        return count;
     }
 
 
     // --- Score Calculation --- //
-
-
-    private final int[] territoryQueue = new int[144];
-    private final int[] territoryDepth = new int[144];
-    private final int[] territoryVisited = new int[144];
-
     private int territoryStamp = 0;
 
     public long getTerritory(int player) {
         int opposite = player == RED ? BLACK : RED;
         int start = getPosition(player);
         int opponent = getPosition(opposite);
-    
+
         // Generate a new visitation stamp.
         if (++territoryStamp == Integer.MAX_VALUE) {
             Arrays.fill(territoryVisited, 0);
             territoryStamp = 1;
         }
-    
+
         int head = 0;
         int tail = 0;
-    
+
         territoryQueue[tail] = start;
         territoryDepth[tail] = 0;
         tail++;
-    
+
         territoryVisited[start] = territoryStamp;
-    
+
         int immediate = 0;
         int future = 0;
-    
+
         while (head < tail) {
-    
+
             int current = territoryQueue[head];
             int depth = territoryDepth[head];
             head++;
-    
+
             if (depth == 2) {
                 continue;
             }
-    
-            int x = current % 12;
-            int y = current / 12;
-    
+
+            //on prend colonne au lieu d'hardcoder le nombre
+            int x = current % cols;
+            int y = current / cols;
+
             for (int d = 0; d < 8; d++) {
-    
+
                 for (int distance = 1; distance <= 3; distance++) {
-    
+
                     int nx = x + DX[d] * distance;
                     int ny = y + DY[d] * distance;
-    
+
                     // Outside the board.
-                    if (nx < 0 || nx >= 12 ||
-                        ny < 0 || ny >= 12) {
-                        break;
-                    }
-    
-                    int next = ny * 12 + nx;
-    
+                    if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) break;
+
+                    int next = ny * cols + nx;
+
                     // Opponent or obstacle.
                     if (next == opponent ||
                         (next != start && board[next] != EMPTY)) {
                         break;
                     }
-    
+
                     if (territoryVisited[next] == territoryStamp) {
                         continue;
                     }
-    
+
                     territoryVisited[next] = territoryStamp;
-    
+
                     territoryQueue[tail] = next;
                     territoryDepth[tail] = depth + 1;
                     tail++;
-    
+
                     if (depth == 0) {
                         immediate++;
                     } else {
@@ -495,7 +562,7 @@ public class Partie {
                 }
             }
         }
-    
+
         // Pack both values into one long to avoid creating an array.
         return ((long) immediate << 32) | (future & 0xFFFFFFFFL);
     }

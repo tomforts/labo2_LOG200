@@ -129,6 +129,7 @@ class Client {
             long start = System.currentTimeMillis();
 
             ArrayList<String> bestMoves = playerAI.getNextMovesAB();
+            System.out.println("Noeuds explores : " + playerAI.getExploredNodes());
             if (!bestMoves.isEmpty()) move = bestMoves.get(0);
 
             //print pour tester la rapidité de notre algo. permet de voir le temps quand on fait des changements..
@@ -137,7 +138,6 @@ class Client {
             // System.out.println("Temps total territory : " + (Partie.testTerritory) + " ms");
             // Partie.testTerritory = 0;
         } else {
-            // get next best thing ?
             move = getAlternativeMove(rejectedMoves);
         }
 
