@@ -60,7 +60,7 @@ class Client {
                         System.out.println("Nouvelle partie! Vous jouez rouge.");
                         if (useImprovedVersion) {
                             currentGame.readBoard(message.getData());
-                            playerAI = new Player(myPiece, currentGame);
+                            playerAI = new Player(myPiece, currentGame, game.getMaxMoveTime());
                             lastMove = playMove2(connection, rejectedMoves);
                         } else {
                             readBoard(message.getData(), board, game.getRows(), game.getCols());
@@ -72,7 +72,7 @@ class Client {
                     case GameConnection.PLAY_BLACK:
                         if (useImprovedVersion) {
                             currentGame.readBoard(message.getData());
-                            playerAI = new Player(myPiece, currentGame);
+                            playerAI = new Player(myPiece, currentGame, game.getMaxMoveTime());
                         } else {
                             readBoard(message.getData(), board, game.getRows(), game.getCols());
                         }
@@ -191,10 +191,8 @@ class Client {
             //print pour tester la rapidité de notre algo. permet de voir le temps quand on fait des changements..
             System.out.println("Temps Alpha-Beta v2 : " + (System.currentTimeMillis() - start) + " ms");
 
-            System.out.println("Temps total getMov : " + (Partie.testGetMove) + " ms");
-            System.out.println("Temps total territory : " + (Partie.testTerritory) + " ms");
-            Partie.testGetMove = 0;
-            Partie.testTerritory = 0;
+            // System.out.println("Temps total territory : " + (Partie.testTerritory) + " ms");
+            // Partie.testTerritory = 0;
         } else {
             // get next best thing ?
             throw new IllegalArgumentException("Invalid playMove2");

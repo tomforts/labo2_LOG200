@@ -9,16 +9,16 @@ public class Partie {
     private static final int BLACK = 3;
     private static final int EMPTY = 0;
     private static final int DESTROYED = 1;
-    private static final int[] DX = {
-        -1, -1, -1, 0, 0, 1, 1, 1
-    };
-
     private static final int[] DY = {
-        -1, 0, 1, -1, 1, -1, 0, 1
+        -1, -1, -1, 
+        0,       0, 
+        1,   1,  1
     };
-
-    public static long testGetMove = 0;
-    public static long testTerritory = 0;
+    private static final int[] DX = {
+        -1, 0, 1, 
+        -1,    1, 
+        -1, 0, 1
+    };
 
     // Board data
     private int[] board;
@@ -32,7 +32,12 @@ public class Partie {
     // Boardstate data
     public int destroyedCount = 0;
 
-
+    /**
+     * Initializes a Partie object representing a game.
+     * Creates an array of rows*cols size for the board
+     * @param rowCount amount of rows
+     * @param colCount amount of cols
+     */
     public Partie(int rowCount, int colCount) {
         rows = rowCount;
         cols = colCount;
@@ -75,33 +80,49 @@ public class Partie {
         }
     }
 
+    /**
+     * Gets the amount of rows
+     * @return amount of rows
+     */
     public int getRowCount() {
         return rows;
     }
 
+    /**
+     * Gets the amount of columns
+     * @return amount of colums
+     */
     public int getColCount() {
         return cols;
     }
 
+    /**
+     * Gets the currently stored position of the player
+     * @param player player to get the position of
+     * @return index in the board array where the player is
+     */
     public int getPosition(int player) {
         return player == RED ? redPos : blackPos;
     }
     
+    /**
+     * Sets the position of the player, does not interact with the board
+     * @param player player to set position
+     * @param position index of the position
+     */
     public void setPosition(int player, int position) {
         if (player == RED) {
-            if (redPos >= 0) {
-                board[redPos] = EMPTY;
-            }
             redPos = position;
         } else {
-            if (blackPos >= 0) {
-                board[blackPos] = EMPTY;
-            }
             blackPos = position;
         }
         board[position] = player;
     }
 
+    /**
+     * Toggles wether a square is destroyed or empty. Interacts with the board
+     * @param position index of the sqyare to destroy
+     */
     public void toggleDestroyed(int position) {
         if (board[position] == DESTROYED) {
             board[position] = EMPTY;
@@ -113,59 +134,198 @@ public class Partie {
     }
 
 
+    // --- Utilities --- //
+
+
+    /**
+     * Gets the index matching the x and y coordinate
+     * @param x
+     * @param y
+     * @return index in the board array of the position
+     */
     public int getIndex(int x, int y) {
         return y * rows + x;
     }
 
+    /**
+     * Gets the x coordinate of the position
+     * @param position
+     * @return x coordinate
+     */
     public int getX(int position) {
         return position % cols;
     }
 
+    /**
+     * Gets the y coordinate of the position
+     * @param position
+     * @return y coordinate
+     */
     public int getY(int position) {
         return position / rows;
     }
 
+    /**
+     * Checks wether the square at the x and y coordinates is outside the board
+     * @param x
+     * @param y
+     * @return
+     */
     public boolean inside(int x, int y) {
         return x >= 0 && x < cols
             && y >= 0 && y < rows;
     }
+
+    /**
+     * Checks wether the given position is outside the board
+     * @param position
+     * @return
+     */
+    public boolean inside(int position) {
+        return position < 0 || position >= (rows * cols);
+    }
     
 
+    // --- String conversions --- //
+
+
+    /**
+     * Turns a position to a string representing it on the board
+     * @param position
+     * @return
+     */
+    public String squareToString(int position) {
+        int x = getX(position);
+        int y = getY(position);
+        return "" + (char)('A' + x) + (rows - y);
+    }
+
+    /**
+     * Gets the position from a string representation of a square
+     * @param square
+     * @return
+     */
+    public int stringToSquare(String square) {
+        if (square.length() < 2) {
+            throw new IllegalArgumentException("Invalid square code: " + square);
+        }
+
+        char colChar = square.charAt(0);
+        int col = colChar - 'A';
+        int row = Integer.parseInt(square.substring(1));
+
+        if (col < 0 || col >= cols || row < 1 || row > rows) {
+            throw new IllegalArgumentException("Square out of bounds: " + square);
+        }
+
+        return getIndex(col, rows - row);
+    }
+
+    /**
+     * Turns a move string to its 3 position components (from, to, destroy)
+     * @param move
+     * @return
+     */
+    public int[] stringToMove(String move) {
+        String[] parts = move.replaceAll("[\\s-]+", "").toUpperCase().split("(?=[A-Z])");
+
+        int from = stringToSquare(parts[0]);
+        int to = stringToSquare(parts[1]);
+        int destroy = stringToSquare(parts[2]);
+
+        return new int[]{from,to,destroy};
+    }
+
+    /**
+     * Turns the from, to and destroyed positions to a move string
+     * @param from
+     * @param to
+     * @param destroyed
+     * @return
+     */
+    public String moveToString(int from, int to, int destroyed) {
+        return squareToString(from) + "-" + squareToString(to) + "-" + squareToString(destroyed);
+    }
+
+
+    // --- Board Interactions --- //
+
+    /**
+     * Moves the player from->to. Affects the board
+     * @param from
+     * @param to
+     * @param player
+     */
     public void applyMovement(int from, int to, int player) {
         board[from] = EMPTY;
         setPosition(player, to);
     }
 
+    /**
+     * Moves the player to->from. Affects the board
+     * @param from
+     * @param to
+     * @param player
+     */
     public void undoMovement(int from, int to, int player) {
         board[to] = EMPTY;
         setPosition(player, from);
     }
 
-
-
+    /**
+     * Applies a move to the board. Uses applyMovement. Affects the board
+     * @param from
+     * @param to
+     * @param destroyed
+     * @param player
+     */
     public void applyMove(int from, int to, int destroyed, int player) {
-        board[from] = EMPTY;
-        setPosition(player, to);
+        applyMovement(from, to, player);
         toggleDestroyed(destroyed);
     }
 
+    /**
+     * Applies a move to the board. Uses applyMovement. Affects the board
+     * @param move
+     * @param player
+     */
     public void applyMove(String move, int player) {
         int[] moveSquares = stringToMove(move);
         applyMove(moveSquares[0], moveSquares[1], moveSquares[2], player);
     }
 
+    /**
+     * Undoes a move, actually applies the move in reverse.
+     * @param move
+     * @param player
+     */
     public void undoMove(String move, int player) {
         int[] moveSquares = stringToMove(move);
         applyMove(moveSquares[1], moveSquares[0], moveSquares[2], player);
     }
 
+    /**
+     * Undoes a move, actually applies the move in reverse.
+     * @param from
+     * @param to
+     * @param destroyed
+     * @param player
+     */
     public void undoMove(int from, int to, int destroyed, int player) {
         applyMove(from, to, destroyed, player);
     }
 
-    // This is responsible for half the time spend
+
+    // --- Move Generation --- //
+
+
+    /**
+     * Gets an arraylist of legal positions for the player to move on the current board
+     * Can be improved for speed
+     * @param player
+     * @return
+     */
     public ArrayList<Integer> getMovements(int player) {
-        long start = System.currentTimeMillis();
         ArrayList<Integer> possibleMovements = new ArrayList<>();
 
         int playerPos = getPosition(player);
@@ -186,12 +346,15 @@ public class Partie {
             }
         }
 
-        testGetMove += System.currentTimeMillis() - start;
         return possibleMovements;
     }
 
+    /**
+     * Gets an arrayList of the positions that can be destroyed by the player
+     * @param player
+     * @return
+     */
     public ArrayList<Integer> getDestroyables(int player) {
-        // get the cases that can be destroyed according to the rules
         int opposite = player == RED ? BLACK : RED;
         ArrayList<Integer> possibleDestroy = new ArrayList<>();
 
@@ -202,11 +365,13 @@ public class Partie {
         // 1 if 20 or more destroyed
         // 2 if between 10 and 19
         // 3 if 10 or less
-        int sizeMod = 1;
+        int sizeMod;
         if (destroyedCount < 10) {
             sizeMod = 3;
         } else if (destroyedCount < 20) {
             sizeMod = 2;
+        } else {
+            sizeMod = 1;
         }
 
         for (int i = sizeMod; i > 0; i--) {
@@ -216,15 +381,24 @@ public class Partie {
                     // n
                     // 0
                     // -n
-                    int newX = px + dx;
-                    int newY = py + dy;
-                    int newPos = getIndex(newX, newY);
-                    if ((dx == 0 && dy == 0) || !inside(newX, newY) || board[newPos] != EMPTY) {
+                    
+                    if (dx == 0 && dy == 0) {
                         // if square is player, not inside or opponent/already destroyed, skip
                         continue;
                     }
-                    // if none of these, add as possible
-                    possibleDestroy.add(newPos);
+
+                    int newX = px + dx;
+                    int newY = py + dy;
+
+                    if (!inside(newX, newY)) {
+                        continue;
+                    }
+
+                    int newPos = getIndex(newX, newY);
+
+                    if (board[newPos] == EMPTY) {
+                        possibleDestroy.add(newPos);
+                    }
                 }
             }
             if (!possibleDestroy.isEmpty()) {
@@ -236,36 +410,103 @@ public class Partie {
         return possibleDestroy;
     }
 
-    public int getTerritory(int player) {
-        // long start = System.currentTimeMillis();
-        boolean workInProgress = true;
-        if (workInProgress) {
-            return 0;
-        }
-        int currentPos = getPosition(player);
 
-        HashSet<Integer> positions = new HashSet<Integer>();
-        ArrayDeque<Integer> posts = new ArrayDeque<Integer>();
-        posts.addAll(getMovements(player));
-        while (posts.size() > 0) {
-            int newPos = posts.poll();
-            if (positions.contains(newPos)) {
+    // --- Score Calculation --- //
+
+
+    private final int[] territoryQueue = new int[144];
+    private final int[] territoryDepth = new int[144];
+    private final int[] territoryVisited = new int[144];
+
+    private int territoryStamp = 0;
+
+    public long getTerritory(int player) {
+        int opposite = player == RED ? BLACK : RED;
+        int start = getPosition(player);
+        int opponent = getPosition(opposite);
+    
+        // Generate a new visitation stamp.
+        if (++territoryStamp == Integer.MAX_VALUE) {
+            Arrays.fill(territoryVisited, 0);
+            territoryStamp = 1;
+        }
+    
+        int head = 0;
+        int tail = 0;
+    
+        territoryQueue[tail] = start;
+        territoryDepth[tail] = 0;
+        tail++;
+    
+        territoryVisited[start] = territoryStamp;
+    
+        int immediate = 0;
+        int future = 0;
+    
+        while (head < tail) {
+    
+            int current = territoryQueue[head];
+            int depth = territoryDepth[head];
+            head++;
+    
+            if (depth == 2) {
                 continue;
             }
-            positions.add(newPos);
-            setPosition(player, newPos);
-            posts.addAll(getMovements(player));
-            board[newPos] = EMPTY;
+    
+            int x = current % 12;
+            int y = current / 12;
+    
+            for (int d = 0; d < 8; d++) {
+    
+                for (int distance = 1; distance <= 3; distance++) {
+    
+                    int nx = x + DX[d] * distance;
+                    int ny = y + DY[d] * distance;
+    
+                    // Outside the board.
+                    if (nx < 0 || nx >= 12 ||
+                        ny < 0 || ny >= 12) {
+                        break;
+                    }
+    
+                    int next = ny * 12 + nx;
+    
+                    // Opponent or obstacle.
+                    if (next == opponent ||
+                        (next != start && board[next] != EMPTY)) {
+                        break;
+                    }
+    
+                    if (territoryVisited[next] == territoryStamp) {
+                        continue;
+                    }
+    
+                    territoryVisited[next] = territoryStamp;
+    
+                    territoryQueue[tail] = next;
+                    territoryDepth[tail] = depth + 1;
+                    tail++;
+    
+                    if (depth == 0) {
+                        immediate++;
+                    } else {
+                        future++;
+                    }
+                }
+            }
         }
-        setPosition(player, currentPos);
-
-        // testTerritory += System.currentTimeMillis() - start;
-
-        return positions.size();
+    
+        // Pack both values into one long to avoid creating an array.
+        return ((long) immediate << 32) | (future & 0xFFFFFFFFL);
     }
 
+    /**
+     * Gets the amount of directions where the player can go.
+     * can be improved, almost a duplicate of getMovements
+     * @param player
+     * @return
+     */
     public int getDirectionCount(int player) {
-        // get how well distributed possible movements are
         int playerPos = getPosition(player);
         int px = getX(playerPos);
         int py = getY(playerPos);
@@ -278,46 +519,10 @@ public class Partie {
             if (!inside(newX, newY)) continue;
 
             int newPos = getIndex(newX, newY);
-            if (board[newPos] != EMPTY) continue;
-            directionCount++;
+            if (board[newPos] == EMPTY) {
+                directionCount++;
+            }
         }
         return directionCount;
-    }
-
-
-    public String squareToString(int position) {
-        int x = getX(position);
-        int y = getY(position);
-        return "" + (char)('A' + x) + (rows - y);
-    }
-
-    public int stringToSquare(String square) {
-        if (square.length() < 2) {
-            throw new IllegalArgumentException("Invalid square code: " + square);
-        }
-
-        char colChar = square.charAt(0);
-        int col = colChar - 'A';
-        int row = Integer.parseInt(square.substring(1));
-
-        if (col < 0 || col >= cols || row < 1 || row > rows) {
-            throw new IllegalArgumentException("Square out of bounds: " + square);
-        }
-
-        return getIndex(col, rows - row);
-    }
-
-    public int[] stringToMove(String move) {
-        String[] parts = move.replaceAll("[\\s-]+", "").toUpperCase().split("(?=[A-Z])");
-
-        int from = stringToSquare(parts[0]);
-        int to = stringToSquare(parts[1]);
-        int destroy = stringToSquare(parts[2]);
-
-        return new int[]{from,to,destroy};
-    }
-
-    public String moveToString(int from, int to, int destroyed) {
-        return squareToString(from) + "-" + squareToString(to) + "-" + squareToString(destroyed);
     }
 }
